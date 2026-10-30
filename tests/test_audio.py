@@ -36,7 +36,7 @@ class AudioTests(unittest.TestCase):
 
     def test_denoise_reduces_stationary_noise(self):
         original = self.source.read_bytes()
-        output = clean_audio(self.source, self.root / 'очищено.wav', 80, False)
+        output = clean_audio(self.source, self.root / 'очищено.wav', 80, False, engine='fast')
         before, after = self.read(self.source), self.read(output)
         def rms(data):
             return math.sqrt(sum(x*x for x in data) / len(data))
@@ -47,7 +47,7 @@ class AudioTests(unittest.TestCase):
     def test_enhancement_and_output_formats(self):
         for suffix in ('.wav', '.flac', '.mp3'):
             with self.subTest(suffix=suffix):
-                target = clean_audio(self.source, self.root / ('result' + suffix))
+                target = clean_audio(self.source, self.root / ('result' + suffix), engine='fast')
                 result = subprocess.run([ffmpeg_path(), '-v', 'error', '-i', str(target),
                                          '-f', 'null', '-'], capture_output=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
@@ -69,7 +69,7 @@ class AudioTests(unittest.TestCase):
         target = self.root / 'existing.wav'
         target.write_bytes(b'keep me')
         with self.assertRaises(RuntimeError):
-            clean_audio(bad, target)
+            clean_audio(bad, target, engine='fast')
         self.assertEqual(target.read_bytes(), b'keep me')
         self.assertFalse(list(self.root.glob('.audio-cleaner-*')))
 
