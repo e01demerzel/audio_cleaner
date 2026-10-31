@@ -46,7 +46,7 @@ class AudioTests(unittest.TestCase):
         self.assertEqual(self.source.read_bytes(), original)
 
     def test_enhancement_and_output_formats(self):
-        for suffix in ('.wav', '.flac', '.mp3'):
+        for suffix in ('.wav', '.flac', '.mp3', '.aac'):
             with self.subTest(suffix=suffix):
                 target = clean_audio(self.source, self.root / ('result' + suffix), engine='fast')
                 result = subprocess.run([ffmpeg_path(), '-v', 'error', '-i', str(target),
@@ -57,6 +57,18 @@ class AudioTests(unittest.TestCase):
         original = self.read(self.source)
         self.assertGreater(max(map(abs, processed)), max(map(abs, original)))
         self.assertLess(max(map(abs, processed)), 32767)
+
+    def test_aac_output_contains_decodable_aac_audio(self):
+        target = clean_audio(self.source, self.root / 'очищено.aac', engine='fast')
+        decoded = subprocess.run([
+            ffmpeg_path(), '-v', 'error', '-f', 'aac', '-i', str(target),
+            '-f', 's16le', '-ac', '1', '-ar', '48000', '-'], capture_output=True)
+        self.assertEqual(decoded.returncode, 0, decoded.stderr)
+        # Raw AAC/ADTS has codec priming/padding, without MP3's gapless metadata.
+        samples = len(decoded.stdout) // 2
+        self.assertGreaterEqual(samples, 144000)
+        self.assertLessEqual(samples, 144000 + 2048)
+        self.assertGreater(max(map(abs, array.array('h', decoded.stdout))), 1000)
 
     def test_cli_saves_mp3_by_default(self):
         original = self.source.read_bytes()

@@ -11,9 +11,23 @@ import tempfile
 import threading
 
 
-def default_output_path(source: str | Path) -> Path:
+OUTPUT_CODECS = {
+    'MP3': ['-c:a', 'libmp3lame', '-b:a', '192k'],
+    'WAV': ['-c:a', 'pcm_s16le'],
+    'FLAC': ['-c:a', 'flac'],
+    'AAC': ['-c:a', 'aac', '-b:a', '192k', '-f', 'adts'],
+}
+
+
+def output_path_for_format(path: str | Path, output_format: str) -> Path:
+    if output_format not in OUTPUT_CODECS:
+        raise ValueError('Выберите формат MP3, WAV, FLAC или AAC.')
+    return Path(path).with_suffix('.' + output_format.lower())
+
+
+def default_output_path(source: str | Path, output_format: str = 'MP3') -> Path:
     source = Path(source)
-    return source.with_name(source.stem + '_очищено.mp3')
+    return output_path_for_format(source.with_name(source.stem + '_очищено.mp3'), output_format)
 
 
 def ffmpeg_path() -> str:
@@ -103,13 +117,13 @@ def clean_audio(source: str | Path, target: str | Path, strength: int = 100,
         raise ValueError('Исходный файл не найден.')
     if source == target:
         raise ValueError('Результат должен отличаться от исходного файла.')
-    if target.suffix.lower() not in ('.wav', '.flac', '.mp3'):
-        raise ValueError('Выберите формат WAV, FLAC или MP3.')
+    output_format = target.suffix.lstrip('.').upper()
+    if output_format not in OUTPUT_CODECS:
+        raise ValueError('Выберите формат MP3, WAV, FLAC или AAC.')
     chain = filters(strength, enhance, engine, clean_pauses)
     check_cancel(cancel)
     model = require_model(model_dir) if engine == 'neural' and strength else None
-    codec = {'.wav': ['-c:a', 'pcm_s16le'], '.flac': ['-c:a', 'flac'],
-             '.mp3': ['-c:a', 'libmp3lame', '-b:a', '192k']}[target.suffix.lower()]
+    codec = OUTPUT_CODECS[output_format]
     def report(message):
         if progress:
             progress(message)
@@ -145,11 +159,12 @@ def launch_gui():
 
     root = tk.Tk()
     root.title('Чистый голос — очистка диктофонных записей')
-    root.geometry('760x650')
-    root.minsize(700, 630)
+    root.geometry('760x700')
+    root.minsize(700, 680)
     panel = ttk.Frame(root, padding=22)
     panel.pack(fill='both', expand=True)
     source, target = tk.StringVar(), tk.StringVar()
+    output_format = tk.StringVar(value='MP3')
     strength, enhance = tk.IntVar(value=100), tk.BooleanVar(value=True)
     mode = tk.StringVar(value='AI — глубокая очистка речи')
     pauses = tk.BooleanVar(value=True)
@@ -164,14 +179,24 @@ def launch_gui():
             ('Аудиозаписи', '*.wav *.mp3 *.m4a *.aac *.flac *.ogg *.wma *.mp4'), ('Все файлы', '*.*')])
         if name:
             source.set(name)
-            target.set(str(default_output_path(name)))
+            target.set(str(default_output_path(name, output_format.get())))
 
     def choose_target():
-        name = filedialog.asksaveasfilename(title='Сохранить результат', defaultextension='.mp3',
-            initialfile=Path(target.get()).name or 'очищено.mp3',
-            filetypes=[('MP3', '*.mp3'), ('WAV — без потерь', '*.wav'), ('FLAC — без потерь', '*.flac')])
+        selected = output_format.get()
+        extension = '.' + selected.lower()
+        current = Path(target.get()) if target.get() else Path('очищено' + extension)
+        name = filedialog.asksaveasfilename(title='Сохранить результат', defaultextension=extension,
+            initialfile=output_path_for_format(current, selected).name,
+            filetypes=[(selected, '*' + extension)])
         if name:
-            target.set(name)
+            target.set(str(output_path_for_format(name, selected)))
+
+    def change_format(_event=None):
+        if target.get():
+            try:
+                target.set(str(output_path_for_format(target.get(), output_format.get())))
+            except ValueError:
+                pass  # A partially typed path is validated when processing starts.
 
     ttk.Label(panel, text='Чистый голос', font=('Segoe UI', 20, 'bold')).pack(anchor='w')
     ttk.Label(panel, text='Нейросетевая очистка голоса · локально, без отправки записи').pack(anchor='w', pady=(0, 16))
@@ -181,6 +206,11 @@ def launch_gui():
         row.pack(fill='x', pady=(3, 10))
         ttk.Entry(row, textvariable=variable).pack(side='left', fill='x', expand=True)
         ttk.Button(row, text='Выбрать…', command=command).pack(side='right', padx=(8, 0))
+    ttk.Label(panel, text='Формат результата').pack(anchor='w')
+    format_box = ttk.Combobox(panel, textvariable=output_format, state='readonly',
+                            values=list(OUTPUT_CODECS))
+    format_box.pack(fill='x', pady=(3, 10))
+    format_box.bind('<<ComboboxSelected>>', change_format)
     ttk.Label(panel, text='Режим обработки').pack(anchor='w')
     mode_box = ttk.Combobox(panel, textvariable=mode, state='readonly', values=[
         'AI — глубокая очистка речи', 'Быстрая очистка — без нейросети'])
@@ -210,6 +240,12 @@ def launch_gui():
         if not src or not dst:
             messagebox.showwarning('Выберите файлы', 'Укажите исходную запись и путь результата.')
             return
+        try:
+            dst = str(output_path_for_format(dst, output_format.get()))
+        except ValueError:
+            messagebox.showwarning('Путь результата', 'Укажите корректное имя файла результата.')
+            return
+        target.set(dst)
         if Path(dst).exists() and not messagebox.askyesno('Заменить файл?', 'Файл результата уже существует. Заменить?'):
             return
         busy, result = True, None
