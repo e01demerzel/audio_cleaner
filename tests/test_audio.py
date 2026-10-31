@@ -3,6 +3,7 @@ import math
 from pathlib import Path
 import random
 import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -56,6 +57,21 @@ class AudioTests(unittest.TestCase):
         original = self.read(self.source)
         self.assertGreater(max(map(abs, processed)), max(map(abs, original)))
         self.assertLess(max(map(abs, processed)), 32767)
+
+    def test_cli_saves_mp3_by_default(self):
+        original = self.source.read_bytes()
+        result = subprocess.run([
+            sys.executable, str(Path(__file__).resolve().parents[1] / 'audio_cleaner.py'),
+            str(self.source), '--engine', 'fast'], capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        target = self.root / 'исходник_очищено.mp3'
+        # Decode explicitly as MP3: verify the encoded format, not just a suffix.
+        decoded = subprocess.run([
+            ffmpeg_path(), '-v', 'error', '-f', 'mp3', '-i', str(target),
+            '-f', 's16le', '-ac', '1', '-ar', '48000', '-'], capture_output=True)
+        self.assertEqual(decoded.returncode, 0, decoded.stderr)
+        self.assertEqual(len(decoded.stdout), 144000 * 2)
+        self.assertEqual(self.source.read_bytes(), original)
 
     def test_same_path_rejected(self):
         original = self.source.read_bytes()

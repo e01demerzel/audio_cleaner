@@ -11,6 +11,11 @@ import tempfile
 import threading
 
 
+def default_output_path(source: str | Path) -> Path:
+    source = Path(source)
+    return source.with_name(source.stem + '_очищено.mp3')
+
+
 def ffmpeg_path() -> str:
     try:
         import imageio_ffmpeg
@@ -159,13 +164,12 @@ def launch_gui():
             ('Аудиозаписи', '*.wav *.mp3 *.m4a *.aac *.flac *.ogg *.wma *.mp4'), ('Все файлы', '*.*')])
         if name:
             source.set(name)
-            p = Path(name)
-            target.set(str(p.with_name(p.stem + '_очищено.wav')))
+            target.set(str(default_output_path(name)))
 
     def choose_target():
-        name = filedialog.asksaveasfilename(title='Сохранить результат', defaultextension='.wav',
-            initialfile=Path(target.get()).name or 'очищено.wav',
-            filetypes=[('WAV — без потерь', '*.wav'), ('FLAC — без потерь', '*.flac'), ('MP3', '*.mp3')])
+        name = filedialog.asksaveasfilename(title='Сохранить результат', defaultextension='.mp3',
+            initialfile=Path(target.get()).name or 'очищено.mp3',
+            filetypes=[('MP3', '*.mp3'), ('WAV — без потерь', '*.wav'), ('FLAC — без потерь', '*.flac')])
         if name:
             target.set(name)
 
@@ -179,7 +183,7 @@ def launch_gui():
         ttk.Button(row, text='Выбрать…', command=command).pack(side='right', padx=(8, 0))
     ttk.Label(panel, text='Режим обработки').pack(anchor='w')
     mode_box = ttk.Combobox(panel, textvariable=mode, state='readonly', values=[
-        'AI — глубокая очистка речи', 'Быстрая очистка — прежний алгоритм'])
+        'AI — глубокая очистка речи', 'Быстрая очистка — без нейросети'])
     mode_box.pack(fill='x', pady=(3, 10))
     label = ttk.Label(panel)
     label.pack(anchor='w')
@@ -278,7 +282,7 @@ def launch_gui():
 def main():
     parser = argparse.ArgumentParser(description='Локальное подавление шума и усиление речи')
     parser.add_argument('source', nargs='?')
-    parser.add_argument('target', nargs='?')
+    parser.add_argument('target', nargs='?', help='Путь результата (по умолчанию: имя_очищено.mp3)')
     parser.add_argument('--strength', type=int, default=100)
     parser.add_argument('--engine', choices=['neural', 'fast'], default='neural')
     parser.add_argument('--keep-pauses', action='store_true', help='Не подавлять остаточный фон в паузах')
@@ -294,10 +298,9 @@ def main():
             parser.exit(1, f'{exc}\n')
         return
     if args.source:
-        if not args.target:
-            parser.error('Укажите путь результата.')
+        target = args.target or default_output_path(args.source)
         try:
-            print(clean_audio(args.source, args.target, args.strength, not args.no_enhance,
+            print(clean_audio(args.source, target, args.strength, not args.no_enhance,
                               engine=args.engine, clean_pauses=not args.keep_pauses, model_dir=args.model_dir))
         except Exception as exc:
             parser.exit(1, f'{exc}\n')

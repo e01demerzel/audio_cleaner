@@ -1,3 +1,3 @@
 `jfk.wav`: 11-second excerpt of John F. Kennedy's inaugural address, public-domain US government speech, obtained from https://github.com/ggerganov/whisper.cpp/blob/master/samples/jfk.wav . Upstream SHA-256: `59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e`.
 
-The test adds deterministic, changing broadband noise and hum to actual speech. The model is tested against the original clean reference, including temporal alignment, residual noise in pauses and speech preservation. Passing these tests is not a perceptual comparison with Auphonic or a guarantee for arbitrary recordings.
+The test adds deterministic, changing broadband noise and hum to actual speech. The model is tested against the original clean reference, including temporal alignment, residual noise in pauses and speech preservation. These checks measure performance on a reproducible test signal; recording quality and acoustic conditions affect real-world results.
